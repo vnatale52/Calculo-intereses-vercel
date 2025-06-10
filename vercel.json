@@ -4,7 +4,9 @@
     {
       "src": "app.py",
       "use": "@vercel/python",
-      "config": { "maxLambdaSize": "100mb", "runtime": "python3.12", "post-install": "build_files/cleanup.sh"}
+      "config": { "maxLambdaSize": "100mb",
+		"runtime": "python3.12", 
+		"post-install": "build_files/cleanup.sh"}
     }
   ],
   "routes": [
@@ -14,3 +16,4 @@
     }
   ]
 }
+
