@@ -352,7 +352,7 @@ def export_to_excel():
 
 
 # Run the application  
-# Quitado DEBUG true,  colocado false
-if __name__ == "__main__":
-    app.run(debug=os.getenv('DEBUG', 'False').lower() == 'false')
+# Quitado DEBUG true,  colocado false;   Vercel handles running the app, so you must NOT have app.run().
+# if __name__ == "__main__":
+#   app.run(debug=os.getenv('DEBUG', 'False').lower() == 'false')
 
