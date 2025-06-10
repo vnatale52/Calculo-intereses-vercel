@@ -1,0 +1,161 @@
+You are absolutely correct. When you cannot upgrade your plan or change your code's logic, the only remaining path is to make the libraries themselves smaller. This is a common and solvable problem in the serverless world.
+
+The strategy is to run a script during the Vercel build process that "slims down" the installed libraries by removing parts that are not needed for running the code, such as test suites, documentation, and compilation artifacts.
+
+Here is the step-by-step guide to implement this. This is the most effective and widely used method.
+
+The Strategy: A Post-Install Cleanup Script
+
+We will create a shell script (.sh) that Vercel will execute immediately after pip install finishes. This script will find and delete unnecessary files from the installed pandas and numpy packages.
+
+Step 1: Create the Cleanup Script
+
+In the root of your project, create a new folder. Let's call it build_files.
+
+Inside this build_files folder, create a new file named cleanup.sh.
+
+Your project structure will now look like this:
+
+/
+├── app.py
+├── requirements.txt
+├── vercel.json
+├── build_files/        <-- NEW FOLDER
+│   └── cleanup.sh      <-- NEW SCRIPT
+└── ...
+
+
+Paste the following code into build_files/cleanup.sh:
+
+#!/bin/bash
+
+# Make sure we are in the correct directory where packages are installed
+# In Vercel, this is /vercel/path0/.py/lib/pythonX.X/site-packages/
+cd "$(python -c 'import site; print(site.getsitepackages()[0])')"
+
+echo "Current directory: $(pwd)"
+echo "Slimming down numpy and pandas..."
+
+# 1. Remove all test directories, which are large and not needed for execution.
+find . -type d -name "tests" -exec rm -r {} +
+
+# 2. Strip debug symbols from the compiled .so files. This is a huge space saver.
+# The -S and -x flags are for more aggressive stripping.
+find . -name "*.so" -type f -exec strip -S -x {} +
+
+# 3. Remove C/C++ header files (.h) which are only needed for compiling against the library.
+find . -name "*.h" -type f -exec rm -f {} +
+
+# 4. Remove numpy's C header files specifically
+if [ -d "numpy/core/include" ]; then
+    echo "Removing numpy/core/include..."
+    rm -rf numpy/core/include
+fi
+
+# 5. Remove dist-info directories for the big libraries. This saves a surprising amount of space.
+# These contain metadata for pip, which is not needed at runtime.
+rm -rf numpy-*.dist-info
+rm -rf pandas-*.dist-info
+
+echo "Cleanup complete. Final size of site-packages:"
+du -sh .
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Bash
+IGNORE_WHEN_COPYING_END
+Step 2: Make the Script Executable
+
+On Linux/macOS systems, you need to give the script permission to be executed. This is a crucial step.
+
+Open your local terminal.
+
+Run the following command:
+
+chmod +x build_files/cleanup.sh
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Bash
+IGNORE_WHEN_COPYING_END
+
+Commit this change with git. Git will store the executable permission.
+
+Step 3: Modify vercel.json to Run the Script
+
+Now, you need to tell Vercel to run this script. We do this by adding a post-install command to the build configuration.
+
+Update your vercel.json file. The key is to run your script as the post-install command within your Python build.
+
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "app.py",
+      "use": "@vercel/python",
+      "config": {
+        "runtime": "python3.9",
+        "maxLambdaSize": "250mb",
+        "post-install": "build_files/cleanup.sh"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "app.py"
+    }
+  ]
+}
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Json
+IGNORE_WHEN_COPYING_END
+
+Key Changes:
+
+We added a "config" block to the build step.
+
+Inside "config", we added the line "post-install": "build_files/cleanup.sh".
+
+This tells Vercel: "After you successfully run pip install -r requirements.txt, immediately execute the build_files/cleanup.sh script before packaging the function."
+
+Step 4: Commit and Push Everything to GitHub
+
+You have created a new folder, a new script, and modified vercel.json. You need to commit all these changes and push them to GitHub.
+
+# Add all the changes
+git add build_files/cleanup.sh
+git add vercel.json
+
+# If you made the script executable, git will see it as a file mode change.
+# You can stage all changes with:
+git add .
+
+# Commit the changes
+git commit -m "feat: Add post-install script to slim down dependencies"
+
+# Push to trigger the deployment
+git push
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Bash
+IGNORE_WHEN_COPYING_END
+
+Now, go to your Vercel dashboard and watch the new deployment. You will see the echo statements from your cleanup.sh script in the build logs, and the deployment should successfully complete under the 250 MB limit.
+
+What This Script Does, Explained
+
+rm -r tests: Deletes entire folders containing unit tests for the libraries. These are essential for developers of Pandas/NumPy but useless for you at runtime.
+
+strip ... *.so: pandas and numpy are mostly fast C code compiled into .so files (Shared Objects). By default, these files contain "debug symbols" which help developers debug crashes. The strip command removes this information, which can reduce file size by 50-80% without affecting performance. This is the single most effective command.
+
+rm *.h: Deletes C header files. These are plain text files needed only if you were to compile another C library that depends on NumPy. They are not needed to run NumPy.
+
+rm -rf *-dist-info: Deletes metadata folders that pip uses to know the version, dependencies, etc. Once installed, this information is not needed for the code to run.
