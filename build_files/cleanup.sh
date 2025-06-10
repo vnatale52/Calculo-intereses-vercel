@@ -1,33 +1,39 @@
 #!/bin/bash
 
-# Make sure we are in the correct directory where packages are installed
-# In Vercel, this is /vercel/path0/.py/lib/pythonX.X/site-packages/
+echo "--- Starting Aggressive Cleanup ---"
 
+# Go to the site-packages directory
 cd "$(python -c 'import site; print(site.getsitepackages()[0])')"
 
-echo "Current directory: $(pwd)"
-echo "Slimming down numpy and pandas..."
+echo "Initial size of site-packages:"
+du -sh .
 
-# 1. Remove all test directories, which are large and not needed for execution.
+# 1. Remove all test directories
+echo "Deleting test directories..."
 find . -type d -name "tests" -exec rm -r {} +
 
-# 2. Strip debug symbols from the compiled .so files. This is a huge space saver.
-# The -S and -x flags are for more aggressive stripping.
+# 2. Remove all __pycache__ directories
+echo "Deleting __pycache__ directories..."
+find . -type d -name "__pycache__" -exec rm -r {} +
+
+# 3. Strip all .so files (this is the most important step)
+echo "Stripping .so files..."
 find . -name "*.so" -type f -exec strip -S -x {} +
 
-# 3. Remove C/C++ header files (.h) which are only needed for compiling against the library.
+# 4. Remove .pyc files
+echo "Deleting .pyc files..."
+find . -name "*.pyc" -exec rm -f {} +
+
+# 5. Remove all metadata directories (more aggressive)
+echo "Deleting .dist-info and .egg-info directories..."
+rm -rf *-*.dist-info
+rm -rf *-*.egg-info
+
+# 6. Remove header files
+echo "Deleting header files..."
 find . -name "*.h" -type f -exec rm -f {} +
+if [ -d "numpy/core/include" ]; then rm -rf numpy/core/include; fi
 
-# 4. Remove numpy's C header files specifically
-if [ -d "numpy/core/include" ]; then
-    echo "Removing numpy/core/include..."
-    rm -rf numpy/core/include
-fi
-
-# 5. Remove dist-info directories for the big libraries. This saves a surprising amount of space.
-# These contain metadata for pip, which is not needed at runtime.
-rm -rf numpy-*.dist-info
-rm -rf pandas-*.dist-info
-
-echo "Cleanup complete. Final size of site-packages:"
+echo "Final size of site-packages:"
 du -sh .
+echo "--- Cleanup Complete ---"
